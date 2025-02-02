@@ -1,0 +1,7 @@
+{
+    "watch": ["server.js", "routes", "middleware", "Models"],
+    "ignore": ["node_modules", "*.test.js"],
+    "ext": "js,json"
+}
+  
+  
