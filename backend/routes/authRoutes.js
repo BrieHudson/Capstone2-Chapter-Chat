@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { Sequelize, User } = require('../models');  // Import your Sequelize User model
+const { Sequelize, User } = require('../models');  
 const authMiddleware = require('../middleware/authMiddleware');
 const router = express.Router();
 const SECRET_KEY = process.env.SECRET_KEY;
@@ -30,7 +30,7 @@ router.post('/signup', async (req, res) => {
     const newUser = await User.create({
       username,
       email,
-      password: hashedPassword  // Note: column should be 'password' not 'password_hash'
+      password: hashedPassword
     });
 
     res.status(201).json({

@@ -1,113 +1,225 @@
 const request = require('supertest');
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const app = require('../app'); 
-const db = require('../db'); 
+const ReadingList = require('../models/readingList');
+const readingListRoutes = require('../routes/readingList');
 
-beforeAll(async () => {
-   // Read the seed SQL file and execute it on the test database
-   const seedFilePath = path.join(__dirname, '../chap_chat_seed.sql');  // Adjust the path if necessary
-   const seedData = fs.readFileSync(seedFilePath, 'utf8');
-   
-   // Execute the seed SQL script to populate the test database
-   await db.query(seedData);
+// Mock authentication middleware
+jest.mock('../middleware/authMiddleware', () => ({
+  authenticate: (req, res, next) => {
+    req.user = { id: 1 };
+    next();
+  }
+}));
+
+// Mock ReadingList model and sequelize
+jest.mock('../models/readingList', () => {
+  const mockModel = () => ({
+    getAllByUserGrouped: jest.fn(),
+    addBook: jest.fn(),
+    moveBook: jest.fn(),
+    deleteBook: jest.fn(),
+    associate: jest.fn()
+  });
+  return mockModel;
 });
 
-afterEach(async () => {
-  // Clear test database entries or rollback transactions
-  await db.query(`DELETE FROM reading_list`);
-});
+jest.mock('../models', () => ({
+  sequelize: {
+    models: {}
+  }
+}));
 
-afterAll(async () => {
-  // Close database connection
-  await db.end();
-});
+const readingListModel = ReadingList();
+const app = express();
+app.use(express.json());
+app.use('/reading-list', readingListRoutes);
 
-describe('ReadingList Routes', () => {
-  describe('GET /readingList/:userId/:status', () => {
-    it('should return books by status', async () => {
-      const userId = 123;
-      const status = 'want_to_read';
+describe('Reading List Routes', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
 
-      const res = await request(app).get(`/readingList/${userId}/${status}`);
-      expect(res.status).toBe(200);
-      expect(res.body).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ userId: 123, status: 'want_to_read' }),
-        ])
+  describe('GET /reading-list', () => {
+    const mockLists = {
+      want_to_read: [{ id: 1, title: 'Book 1' }],
+      reading: [{ id: 2, title: 'Book 2' }],
+      read: [{ id: 3, title: 'Book 3' }]
+    };
+
+    it('should successfully get reading lists', async () => {
+      readingListModel.getAllByUserGrouped.mockResolvedValue(mockLists);
+
+      const response = await request(app)
+        .get('/reading-list')
+        .expect(200);
+
+      expect(response.body).toEqual({
+        toRead: mockLists.want_to_read,
+        reading: mockLists.reading,
+        completed: mockLists.read
+      });
+      expect(readingListModel.getAllByUserGrouped).toHaveBeenCalledWith(1);
+    });
+
+    it('should return 500 on database error', async () => {
+      readingListModel.getAllByUserGrouped.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .get('/reading-list')
+        .expect(500);
+
+      expect(response.body).toHaveProperty('error', 'Internal server error');
+    });
+  });
+
+  describe('POST /reading-list/add', () => {
+    const mockBookData = {
+      book: {
+        id: 'book1',
+        title: 'Test Book'
+      },
+      list: 'want_to_read'
+    };
+
+    it('should successfully add a book to reading list', async () => {
+      readingListModel.addBook.mockResolvedValue({
+        id: 1,
+        ...mockBookData.book
+      });
+
+      const response = await request(app)
+        .post('/reading-list/add')
+        .send(mockBookData)
+        .expect(200);
+
+      expect(response.body).toEqual({
+        success: true,
+        book: {
+          id: 1,
+          ...mockBookData.book
+        }
+      });
+      expect(readingListModel.addBook).toHaveBeenCalledWith(
+        1,
+        mockBookData.book,
+        mockBookData.list
       );
     });
 
-    it('should return 404 if no books found', async () => {
-      const userId = 999; // Ensure this user has no entries in the seed data
-      const status = 'read';
+    it('should return 400 for invalid list type', async () => {
+      const response = await request(app)
+        .post('/reading-list/add')
+        .send({
+          ...mockBookData,
+          list: 'invalid_list'
+        })
+        .expect(400);
 
-      const res = await request(app).get(`/readingList/${userId}/${status}`);
-      expect(res.status).toBe(404);
-      expect(res.body.message).toBe(`No books found with status ${status}`);
+      expect(response.body).toHaveProperty('error', 'Invalid list type');
+    });
+
+    it('should return 500 on database error', async () => {
+      readingListModel.addBook.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .post('/reading-list/add')
+        .send(mockBookData)
+        .expect(500);
+
+      expect(response.body).toEqual({
+        success: false,
+        error: 'Internal server error',
+        details: 'Database error'
+      });
     });
   });
 
-  describe('POST /readingList', () => {
-    it('should add a book to the reading list', async () => {
-      const newBook = { userId: 124, bookId: 789, status: 'reading' };
+  describe('PUT /reading-list/move', () => {
+    const mockMoveData = {
+      bookId: 1,
+      fromList: 'want_to_read',
+      toList: 'reading'
+    };
 
-      const res = await request(app).post('/readingList').send(newBook);
-      expect(res.status).toBe(201);
-      expect(res.body).toEqual(expect.objectContaining(newBook));
-    });
+    it('should successfully move a book between lists', async () => {
+      readingListModel.moveBook.mockResolvedValue({ success: true });
 
-    it('should return 400 for missing fields', async () => {
-      const newBook = { userId: 124, bookId: 789 }; // Missing status
+      const response = await request(app)
+        .put('/reading-list/move')
+        .send(mockMoveData)
+        .expect(200);
 
-      const res = await request(app).post('/readingList').send(newBook);
-      expect(res.status).toBe(400);
-      expect(res.body.error).toBe('userId, bookId, and status are required');
-    });
-  });
-
-  describe('PUT /readingList/:userId/:bookId', () => {
-    it('should update the status of a book', async () => {
-      const userId = 123;
-      const bookId = 456;
-      const updatedStatus = { status: 'read' };
-
-      const res = await request(app).put(`/readingList/${userId}/${bookId}`).send(updatedStatus);
-      expect(res.status).toBe(200);
-      expect(res.body).toEqual(expect.objectContaining(updatedStatus));
-    });
-
-    it('should return 404 if the book is not found', async () => {
-      const userId = 999; // Ensure this user/book combo doesn't exist
-      const bookId = 888;
-      const updatedStatus = { status: 'read' };
-
-      const res = await request(app).put(`/readingList/${userId}/${bookId}`).send(updatedStatus);
-      expect(res.status).toBe(404);
-      expect(res.body.message).toBe('Reading list entry not found');
-    });
-  });
-
-  describe('GET /readingList/:userId', () => {
-    it('should return all books in the user\'s reading list', async () => {
-      const userId = 123;
-
-      const res = await request(app).get(`/readingList/${userId}`);
-      expect(res.status).toBe(200);
-      expect(res.body).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ userId: 123 }),
-        ])
+      expect(response.body).toEqual({
+        success: true,
+        result: { success: true }
+      });
+      expect(readingListModel.moveBook).toHaveBeenCalledWith(
+        1,
+        mockMoveData.bookId,
+        mockMoveData.fromList,
+        mockMoveData.toList
       );
     });
 
-    it('should return 404 if no books are found', async () => {
-      const userId = 999; // Ensure this user has no entries in the seed data
+    it('should return 400 if bookId is missing', async () => {
+      const response = await request(app)
+        .put('/reading-list/move')
+        .send({
+          fromList: 'want_to_read',
+          toList: 'reading'
+        })
+        .expect(400);
 
-      const res = await request(app).get(`/readingList/${userId}`);
-      expect(res.status).toBe(404);
-      expect(res.body.message).toBe('No books found in the reading list');
+      expect(response.body).toEqual({
+        success: false,
+        error: 'Missing bookId'
+      });
+    });
+
+    it('should return 400 for invalid list types', async () => {
+      const response = await request(app)
+        .put('/reading-list/move')
+        .send({
+          ...mockMoveData,
+          fromList: 'invalid_list'
+        })
+        .expect(400);
+
+      expect(response.body).toEqual({
+        success: false,
+        error: 'Invalid fromList status: invalid_list',
+        validStatuses: ['want_to_read', 'reading', 'read']
+      });
+    });
+  });
+
+  describe('DELETE /reading-list/:bookId', () => {
+    it('should successfully delete a book from reading list', async () => {
+      readingListModel.deleteBook.mockResolvedValue(true);
+
+      const response = await request(app)
+        .delete('/reading-list/1')
+        .expect(200);
+
+      expect(response.body).toEqual({
+        success: true,
+        message: 'Book removed successfully'
+      });
+      expect(readingListModel.deleteBook).toHaveBeenCalledWith(1, '1');
+    });
+
+    it('should return 500 on database error', async () => {
+      readingListModel.deleteBook.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .delete('/reading-list/1')
+        .expect(500);
+
+      expect(response.body).toEqual({
+        success: false,
+        error: 'Internal server error',
+        details: 'Database error'
+      });
     });
   });
 });

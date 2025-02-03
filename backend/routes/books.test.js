@@ -1,69 +1,117 @@
 const request = require('supertest');
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const db = require('../db'); 
-const app = require('../app'); 
-const booksRouter = require('./books'); 
+const axios = require('axios');
+const Book = require('../models/books');
+const booksRoutes = require('../routes/books');
 
-// Middleware to parse JSON
+// Mock axios
+jest.mock('axios');
+
+// Mock Book model
+jest.mock('../models/books', () => ({
+  getById: jest.fn()
+}));
+
+const app = express();
 app.use(express.json());
+app.use('/books', booksRoutes);
 
-// Use the books router for testing
-app.use('/api/books', booksRouter);
-
-// Setup and teardown hooks
-beforeAll(async () => {
-  const seedFilePath = path.join(__dirname, '../chap_chat_seed.sql');
-  console.log('Seed file path:', seedFilePath); // Debugging step
-  
-  try {
-    const seedData = fs.readFileSync(seedFilePath, 'utf8');
-    console.log('Seed data loaded:', seedData); // Debugging step
-    await db.query(seedData);
-  } catch (err) {
-    console.error('Error seeding the database:', err);
-    throw err;
-  }
-});
-
-
-afterEach(async () => {
-  // Clear test data to ensure isolation
-  await db.query(`DELETE FROM books`);
-});
-
-afterAll(async () => {
-  // Close database connection
-  await db.end();
-});
-
-// Define test cases
-describe('Books API Routes', () => {
-  it('should return book data with default maxResults', async () => {
-    const response = await request(app)
-      .get('/api/books/search?q=Harry+Potter'); 
-
-    expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('items');
-    expect(response.body.items[0].volumeInfo).toHaveProperty('title', 'Harry Potter and the Sorcerer\'s Stone');
-    expect(response.body.items[0].volumeInfo.industryIdentifiers[0]).toHaveProperty('identifier', '9780439708180');
+describe('Books Routes', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    process.env.GOOGLE_BOOKS_API_KEY = 'test-api-key';
   });
 
-  it('should return book data with specified maxResults', async () => {
-    const response = await request(app)
-      .get('/api/books/search?q=Harry+Potter&maxResults=5'); // maxResults is specified as 5
+  describe('GET /books/search', () => {
+    const mockGoogleBooksResponse = {
+      data: {
+        items: [
+          {
+            id: 'book1',
+            volumeInfo: {
+              title: 'Test Book',
+              authors: ['Test Author']
+            }
+          }
+        ]
+      }
+    };
 
-    expect(response.status).toBe(200);
-    expect(response.body).toHaveProperty('items');
-    expect(response.body.items[0].volumeInfo).toHaveProperty('title', 'Harry Potter and the Chamber of Secrets');
-    expect(response.body.items[0].volumeInfo.industryIdentifiers[0]).toHaveProperty('identifier', '9780439064873');
+    it('should successfully search for books', async () => {
+      axios.get.mockResolvedValue(mockGoogleBooksResponse);
+
+      const response = await request(app)
+        .get('/books/search')
+        .query({ q: 'test book' })
+        .expect(200);
+
+      expect(axios.get).toHaveBeenCalledWith(
+        expect.stringContaining('/volumes?q=test%20book')
+      );
+      expect(response.body).toEqual(mockGoogleBooksResponse.data);
+    });
+
+    it('should return 400 if query parameter is missing', async () => {
+      const response = await request(app)
+        .get('/books/search')
+        .expect(400);
+
+      expect(response.body).toHaveProperty('error', "Query parameter 'q' is required");
+    });
+
+    it('should return 500 on API error', async () => {
+      axios.get.mockRejectedValue(new Error('API Error'));
+
+      const response = await request(app)
+        .get('/books/search')
+        .query({ q: 'test book' })
+        .expect(500);
+
+      expect(response.body).toHaveProperty('error', 'Failed to fetch books');
+    });
   });
 
-  it('should handle errors gracefully for missing query', async () => {
-    const response = await request(app).get('/api/books/search');
-    expect(response.status).toBe(400);
-    expect(response.body).toHaveProperty('error', "Query parameter 'q' is required");
+  describe('GET /books/:id', () => {
+    const mockBookData = {
+      id: 'book1',
+      title: 'Test Book',
+      author: 'Test Author'
+    };
+
+    it('should return book from database if found', async () => {
+      Book.getById.mockResolvedValue(mockBookData);
+
+      const response = await request(app)
+        .get('/books/book1')
+        .expect(200);
+
+      expect(response.body).toEqual(mockBookData);
+      expect(axios.get).not.toHaveBeenCalled();
+    });
+
+    it('should fetch from Google Books API if not in database', async () => {
+      Book.getById.mockResolvedValue(null);
+      axios.get.mockResolvedValue({ data: mockBookData });
+
+      const response = await request(app)
+        .get('/books/book1')
+        .expect(200);
+
+      expect(axios.get).toHaveBeenCalledWith(
+        expect.stringContaining('/volumes/book1')
+      );
+      expect(response.body).toEqual(mockBookData);
+    });
+
+    it('should return 500 on error', async () => {
+      Book.getById.mockRejectedValue(new Error('Database error'));
+
+      const response = await request(app)
+        .get('/books/book1')
+        .expect(500);
+
+      expect(response.body).toHaveProperty('error', 'Failed to fetch book details');
+    });
   });
 });
 
