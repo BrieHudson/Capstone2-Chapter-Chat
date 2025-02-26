@@ -1,24 +1,49 @@
 const { Sequelize } = require('sequelize');
-const config = require('./config/sequelize.config.js')[process.env.NODE_ENV || 'development'];
+require('dotenv').config();
 
 console.log('Initializing database connection...');
 
-const sequelize = new Sequelize(process.env.DATABASE_URL, config);
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL environment variable is not set');
+  process.exit(1);
+}
 
-const testConnection = async () => {
-  try {
-    await sequelize.authenticate();
-    console.log('Database connection established successfully.');
-  } catch (error) {
-    console.error('Unable to connect to the database:', error);
-  } finally {
-    process.exit();
+console.log('Attemping to connect to database...');
+
+const sequelize = new Sequelize(process.env.DATABASE_URL, {
+  dialect: 'postgres',
+  dialectOptions: {
+    ssl: {
+      require: true,
+      rejectUnauthorized: false
+    },
+    statement_timeout: 60000,
+    connectTimeout: 60000,
+  },
+  pool: {
+    max: 5,
+    min: 0,
+    idle: 30000,
+    acquire: 10000
+  },
+  logging: console.log,
+  retry: {
+    max: 5,
+    match: [
+      /SequelizeConnectionError/,
+      /SequelizeConnectionRefusedError/,
+      /SequelizeHostNotFoundError/,
+      /SequelizeHostNotReachableError/,
+      /SequelizeInvalidConnectionError/,
+      /SequelizeConnectionTimedOutError/
+    ],
+    backoffBase: 1000,
+    backoffExponent: 1.5,
   }
-};
+});
 
-testConnection();
+module.exports = { sequelize, Sequelize };
 
-module.exports = { sequelize, testConnection };
 
 
 

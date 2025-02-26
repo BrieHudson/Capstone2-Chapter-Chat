@@ -8,30 +8,27 @@ process.on('uncaughtException', (error) => {
 });
 
 const app = require('./app');
-const { testConnection } = require('./db');
-const syncDatabase = require('./syncDatabase');
-
-const PORT = 5012;
+const PORT = process.env.PORT || 5012;
 
 async function startServer() {
   try {
-    // Test database connection
-    const connected = await testConnection();
-    if (!connected) {
-      throw new Error('Failed to establish database connection');
-    }
-
-    // Sync database in development
-    if (process.env.NODE_ENV !== 'production') {
-      await syncDatabase();
-    }
-
-    // Start server
-    app.listen(PORT, () => {
-      console.log(`Server is running on http://localhost:${PORT}`);
+    console.log('Environment:', process.env.NODE_ENV);
+    console.log('Starting server initialization...');
+    
+    const server = app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
     });
+
+    server.on('error', (error) => {
+      console.error('Server error:', error);
+    });
+
   } catch (error) {
-    console.error('Failed to start server:', error);
+    console.error('Failed to start server:', {
+      error: error.message,
+      stack: error.stack,
+      name: error.name
+    });
     process.exit(1);
   }
 }

@@ -32,6 +32,14 @@ module.exports = {
         type: Sequelize.STRING,
         allowNull: true,
       },
+      google_books_id: { 
+        type: Sequelize.STRING,
+        allowNull: true,
+      },
+      published_date: { 
+        type: Sequelize.DATE,
+        allowNull: true,
+      },
       created_at: {
         allowNull: false,
         type: Sequelize.DATE,

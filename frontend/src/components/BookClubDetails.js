@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import axios from "axios";
+import api from './api/axios';
 import "./BookClubDetails.css";
 
 const BookClubDetails = () => {
@@ -47,7 +47,7 @@ const BookClubDetails = () => {
     if (window.confirm('Are you sure you want to delete this book club?')) {
       try {
         const token = localStorage.getItem('token');
-        await axios.delete(`/api/bookclubs/${id}`, {
+        await api.delete(`/api/bookclubs/${id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         navigate('/bookclubs');
@@ -64,15 +64,15 @@ const BookClubDetails = () => {
         setLoading(true);
         const token = localStorage.getItem('token');
         
-        const clubResponse = await axios.get(`/api/bookclubs/${id}`, {
+        const clubResponse = await api.get(`/api/bookclubs/${id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
 
-        console.log("Club Response:", clubResponse.data);
         setClubDetails(clubResponse.data);
         setJoined(clubResponse.data.isMember);
         setIsCreator(clubResponse.data.creator.id === parseInt(localStorage.getItem('userId')));
         setForumPosts(clubResponse.data.forumPosts || []);
+        setIsForumOpen(true); // Auto-open forum on load
         
       } catch (error) {
         console.error("Error fetching data:", error);
@@ -88,7 +88,7 @@ const BookClubDetails = () => {
   const handleJoinClick = async () => {
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`/api/bookclubs/${id}/join`, {}, {
+      await api.post(`/api/bookclubs/${id}/join`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setJoined(true);
@@ -103,16 +103,17 @@ const BookClubDetails = () => {
     
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`/api/forums/${id}`, {
+      await api.post(`/api/forums/${id}`, {
         content: newPost,
         contains_spoilers: isSpoiler
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      const response = await axios.get(`/api/forums/${id}`, {
+      const response = await api.get(`/api/forums/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      
       setForumPosts(response.data);
       setNewPost("");
       setIsSpoiler(false);
@@ -125,7 +126,6 @@ const BookClubDetails = () => {
   if (error) return <div className="error">Error: {error}</div>;
   if (!clubDetails) return <div className="not-found">No club details found</div>;
 
-  // Check if book details exist directly in clubDetails
   const hasBookDetails = clubDetails.title && clubDetails.author;
 
   return (
@@ -141,7 +141,6 @@ const BookClubDetails = () => {
         <h1 className="book-club-title">{clubDetails.name}</h1>
         <p className="book-club-description">{clubDetails.description}</p>
         
-        {/* Meeting Time */}
         {clubDetails.meeting_time && (
           <div className="meeting-time-section">
             <h3 className="section-title">Meeting Time</h3>
@@ -151,7 +150,6 @@ const BookClubDetails = () => {
           </div>
         )}
         
-        {/* Club Image */}
         {clubDetails.image_url && (
           <div className="club-image-section">
             <img 
@@ -163,7 +161,6 @@ const BookClubDetails = () => {
           </div>
         )}
         
-        {/* Current Book Section */}
         <div className="current-book-section">
           <h3 className="section-title">Current Book</h3>
           {(hasBookDetails || clubDetails.currentBook) ? (
@@ -190,7 +187,6 @@ const BookClubDetails = () => {
           )}
         </div>
 
-        {/* Club Management Section */}
         {isCreator && (
           <div className="club-management-section">
             <h3 className="section-title">Club Management</h3>
@@ -211,7 +207,6 @@ const BookClubDetails = () => {
           </div>
         )}
 
-        {/* Join Button */}
         {!joined && !isCreator && (
           <button 
             onClick={handleJoinClick}
@@ -221,7 +216,6 @@ const BookClubDetails = () => {
           </button>
         )}
 
-        {/* Discussion Section */}
         <div className="discussions-section">
           <button 
             className="forum-toggle"
@@ -279,24 +273,33 @@ const BookClubDetails = () => {
                     <div 
                       key={post.id} 
                       className={`forum-post ${
-                        post.contains_spoilers ? 'spoiler-post' : 'regular-post'
+                        post.contains_spoilers ? 'spoiler-post' : ''
                       }`}
                     >
                       {post.contains_spoilers && (
                         <div className="spoiler-warning">
-                          ⚠️ Contains Spoilers
+                          <span role="img" aria-label="warning">⚠️</span>
+                          Contains Spoilers
                         </div>
                       )}
                       <p className="post-content">{post.content}</p>
                       <div className="post-meta">
-                        Posted by {post.user.username} on {
-                          new Date(post.created_at).toLocaleDateString()
+                        Posted by <strong>{post.user.username}</strong> on {
+                          new Date(post.created_at).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })
                         }
                       </div>
                     </div>
                   ))
               ) : (
-                <p className="no-posts-message">No discussions yet. Be the first to post!</p>
+                <p className="no-posts-message">
+                  No discussions yet. Be the first to post!
+                </p>
               )}
             </div>
           </div>

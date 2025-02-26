@@ -4,24 +4,36 @@ const db = require('./models');
 async function syncDatabase() {
   try {
     console.log('Starting database sync...');
-    await sequelize.authenticate();
+    console.log('Environment:', process.env.NODE_ENV);
+    
+    await sequelize.authenticate({
+      retry: {
+        max: 5,
+        timeout: 60000
+      }
+    });
     console.log('Database connection verified.');
-    
-    await sequelize.sync({ alter: true });
-    console.log('Database synchronized successfully.');
-    
+
+    console.log('Available models:', Object.keys(db).filter(key => 
+      key !== 'sequelize' && key !== 'Sequelize'
+    ));
+
+    if (process.env.NODE_ENV !== 'production') {
+      await sequelize.sync({ alter: true });
+      console.log('Database synchronized successfully.');
+    }
+
     return true;
   } catch (error) {
-    console.error('Error syncing database:', error);
+    console.error('Database sync error:', {
+      message: error.message,
+      name: error.name,
+      code: error.original?.code,
+      detail: error.original?.detail,
+      ssl: error.parent?.code === 'SELF_SIGNED_CERT_IN_CHAIN' ? 'SSL Error' : 'N/A'
+    });
     throw error;
   }
-}
-
-// Only run if this file is executed directly
-if (require.main === module) {
-  syncDatabase()
-    .then(() => process.exit(0))
-    .catch(() => process.exit(1));
 }
 
 module.exports = syncDatabase;

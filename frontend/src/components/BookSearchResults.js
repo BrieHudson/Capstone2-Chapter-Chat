@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
+import api from './api/axios';
 import BookCard from './BookCard';
+import BookDetails from './BookDetails';
 import './BookSearchResults.css';
 
 const BookSearchResults = ({ searchResults }) => {
@@ -26,19 +28,16 @@ const BookSearchResults = ({ searchResults }) => {
         description: book.volumeInfo.description
       };
 
-      const response = await fetch('http://localhost:5012/api/readingList/add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ 
-          book: bookData, 
-          list: newList
-        })
-      });
+      const response = await api.post('/api/readingList/add', 
+        { book: bookData, list: newList },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        }
+      );
 
-      if (!response.ok) {
+      if (!response.data.success) {
         throw new Error('Failed to add book');
       }
 
@@ -77,27 +76,11 @@ const BookSearchResults = ({ searchResults }) => {
         <div className="modal-overlay" onClick={() => setSelectedBook(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
             <button className="close-modal" onClick={() => setSelectedBook(null)}>×</button>
-            <div className="book-details">
-              {selectedBook.volumeInfo.imageLinks?.thumbnail && (
-                <img
-                  src={selectedBook.volumeInfo.imageLinks.thumbnail}
-                  alt={selectedBook.volumeInfo.title}
-                  className="book-cover"
-                />
-              )}
-              <div className="book-info">
-                <h2>{selectedBook.volumeInfo.title}</h2>
-                <p className="author">by {selectedBook.volumeInfo.authors?.join(', ')}</p>
-                <p className="published">Published: {selectedBook.volumeInfo.publishedDate}</p>
-                <p className="categories">
-                  Categories: {selectedBook.volumeInfo.categories?.join(', ')}
-                </p>
-                <p className="isbn">
-                  ISBN: {selectedBook.volumeInfo.industryIdentifiers?.[0]?.identifier}
-                </p>
-                <p className="full-description">{selectedBook.volumeInfo.description}</p>
-              </div>
-            </div>
+            <BookDetails 
+              book={selectedBook} 
+              isModal={true} 
+              onClose={() => setSelectedBook(null)}
+            />
           </div>
         </div>
       )}

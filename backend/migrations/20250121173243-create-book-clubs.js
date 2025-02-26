@@ -16,6 +16,10 @@ module.exports = {
         type: Sequelize.TEXT,
         allowNull: true,
       },
+      image_url: {  // Add this line
+        type: Sequelize.TEXT,
+        allowNull: true,
+      },
       creator_id: {
         type: Sequelize.INTEGER,
         references: {
@@ -23,16 +27,24 @@ module.exports = {
           key: 'id',
         },
       },
-      meeting_time: {
-        type: Sequelize.DATE,
-        allowNull: false,
-      },
       book_id: {
         type: Sequelize.INTEGER,
         references: {
           model: 'books',
           key: 'id',
         },
+      },
+      current_book_id: {  // Add this block
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: {
+          model: 'books',
+          key: 'id',
+        },
+      },
+      meeting_time: {
+        type: Sequelize.DATE,
+        allowNull: false,
       },
       created_at: {
         allowNull: false,

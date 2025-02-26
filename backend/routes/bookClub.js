@@ -176,6 +176,8 @@ router.post('/', authenticate, async (req, res) => {
         current_book_id: book.id, 
         meeting_time,
         creator_id: req.user.id,
+        created_at: new Date(),  
+        updated_at: new Date() 
       }, { transaction: t });
 
       // Add the creator as a member

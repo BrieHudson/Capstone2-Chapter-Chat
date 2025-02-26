@@ -1,26 +1,40 @@
-require('dotenv').config(); // Load environment variables
+require('dotenv').config();
 
 const commonConfig = {
   dialect: 'postgres',
-  dialectOptions: process.env.DATABASE_URL
-    ? { ssl: { require: true, rejectUnauthorized: false } }
-    : {},
+  dialectModule: require('pg'),
+  dialectOptions: {
+    ssl: {
+      require: true,
+      rejectUnauthorized: false,
+      ca: null,
+      key: null,
+      cert: null,
+    }
+  },
+  pool: {
+    max: 10,
+    min: 2,
+    idle: 20000,
+    acquire: 60000
+  }
 };
 
 module.exports = {
   development: {
-    use_env_variable: 'DATABASE_URL',
+    url: process.env.DATABASE_URL,
     ...commonConfig,
   },
   test: {
-    use_env_variable: 'DATABASE_URL',
+    url: process.env.DATABASE_URL,
     ...commonConfig,
   },
   production: {
-    use_env_variable: 'DATABASE_URL',
+    url: process.env.DATABASE_URL,
     ...commonConfig,
-  },
+  }
 };
+
 
 
 

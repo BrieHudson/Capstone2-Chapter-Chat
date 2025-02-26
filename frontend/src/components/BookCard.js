@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
+import api from './api/axios';
 import './BookCard.css';
 
 const BookCard = ({ 
   book, 
   onSelect, 
-  listType = null,  // null for search results, string for library view
+  listType = null,
   onListChange,
   onRemoveFromList 
 }) => {
   const bookInfo = book.volumeInfo || book;
-  const [selectedList, setSelectedList] = useState(listType || 'toRead');
+  const [selectedList, setSelectedList] = useState(listType || 'want_to_read');
+  const imageUrl = bookInfo.imageLinks?.thumbnail || bookInfo.coverImage || bookInfo.thumbnail_url;
 
   const handleListChange = (e) => {
     e.stopPropagation();
@@ -39,25 +41,19 @@ const BookCard = ({
       const bookData = {
         title: bookInfo.title,
         author: Array.isArray(bookInfo.authors) ? bookInfo.authors.join(', ') : bookInfo.author,
-        coverImage: bookInfo.imageLinks?.thumbnail || bookInfo.coverImage,
+        coverImage: imageUrl,
         description: bookInfo.description,
       };
   
-      const response = await fetch('http://localhost:5012/api/readingList/add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ book: bookData, list: selectedList }),
-      });
+      const response = await api.post('/api/readingList/add', 
+        { book: bookData, list: selectedList },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
+      );
   
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to add book to list');
-      }
-  
-      const result = await response.json();
       alert(`Book added to ${selectedList} list!`);
     } catch (error) {
       console.error('Error adding book:', error);
@@ -68,9 +64,9 @@ const BookCard = ({
   return (
     <div className="book-card" onClick={() => onSelect && onSelect(book)}>
       <div className="book-image">
-        {(bookInfo.imageLinks?.thumbnail || bookInfo.coverImage) ? (
+        {imageUrl ? (
           <img
-            src={bookInfo.imageLinks?.thumbnail || bookInfo.coverImage}
+            src={imageUrl}
             alt={bookInfo.title}
             className="book-cover"
           />
@@ -102,9 +98,9 @@ const BookCard = ({
                 onChange={handleListChange}
                 className="list-select"
               >
-                <option value="toRead">Want to Read</option>
+                <option value="want_to_read">Want to Read</option>
                 <option value="reading">Currently Reading</option>
-                <option value="completed">Read</option>
+                <option value="read">Read</option>
               </select>
               <button 
                 className="add-button"
@@ -121,9 +117,9 @@ const BookCard = ({
                 onChange={handleListChange}
                 className="list-select"
               >
-                <option value="toRead">Want to Read</option>
+                <option value="want_to_read">Want to Read</option>
                 <option value="reading">Currently Reading</option>
-                <option value="completed">Read</option>
+                <option value="read">Read</option>
               </select>
               <button 
                 className="remove-button"

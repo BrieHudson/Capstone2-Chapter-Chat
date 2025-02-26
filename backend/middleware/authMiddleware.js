@@ -5,7 +5,10 @@ const authenticate = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({ error: 'Authentication token required' });
+    return res.status(401).json({ 
+      error: 'Please log in to continue',
+      code: 'TOKEN_REQUIRED'
+    });
   }
 
   try {
@@ -13,22 +16,35 @@ const authenticate = async (req, res, next) => {
     const user = await User.findByPk(decoded.id);
 
     if (!user) {
-      return res.status(401).json({ error: 'User not found' });
+      return res.status(401).json({ 
+        error: 'User account not found',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+
+    // Check if token version matches
+    if (decoded.tokenVersion !== user.tokenVersion) {
+      return res.status(401).json({ 
+        error: 'Your session has expired. Please log in again.',
+        code: 'TOKEN_INVALIDATED'
+      });
     }
 
     req.user = user;
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Invalid authentication token' });
+    if (error instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({ 
+        error: 'Your session has expired. Please log in again.',
+        code: 'TOKEN_EXPIRED'
+      });
+    }
+    res.status(401).json({ 
+      error: 'Please log in again to continue.',
+      code: 'AUTH_FAILED'
+    });
   }
 };
 
-const authorizeAdmin = (req, res, next) => {
-  if (!req.user.isAdmin) {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-  next();
-};
-
-module.exports = { authenticate, authorizeAdmin };
+module.exports = { authenticate };
 

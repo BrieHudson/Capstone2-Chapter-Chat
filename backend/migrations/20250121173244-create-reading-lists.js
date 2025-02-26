@@ -2,6 +2,12 @@
 module.exports = {
   up: async (queryInterface, Sequelize) => {
     await queryInterface.createTable('reading_lists', {
+      id: { 
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true,
+        allowNull: false
+      },
       user_id: {
         type: Sequelize.INTEGER,
         allowNull: false,
@@ -19,7 +25,7 @@ module.exports = {
         },
       },
       status: {
-        type: Sequelize.STRING,
+        type: Sequelize.ENUM('want_to_read', 'reading', 'read'),
         allowNull: false,
       },
       created_at: {
